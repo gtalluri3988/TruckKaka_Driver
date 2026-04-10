@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "374485808141",
+    "project_id": "asva-3bb8c",
+    "storage_bucket": "asva-3bb8c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:374485808141:android:abb06022933a36710a9144",
+        "android_client_info": {
+          "package_name": "com.asva.truckkakadriver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjYJgVUS4svmrHvYUcBuI0G5hrFBOoIBI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:374485808141:android:18f2dd41bea26c540a9144",
+        "android_client_info": {
+          "package_name": "com.example.truck_kaka"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjYJgVUS4svmrHvYUcBuI0G5hrFBOoIBI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
