@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../model/trip_model.dart';
 import '../../../utils/localization/translation_keys.dart';
 import 'trip_detail_controller.dart';
 
@@ -44,15 +45,20 @@ class TripDetailScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(controller.error.value,
-                    style: const TextStyle(color: Colors.grey)),
+                Text(
+                  controller.error.value,
+                  style: const TextStyle(color: Colors.grey),
+                ),
                 const SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: controller.loadTrip,
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B2A49)),
-                  child: const Text('Retry',
-                      style: TextStyle(color: Colors.white)),
+                    backgroundColor: const Color(0xFF1B2A49),
+                  ),
+                  child: const Text(
+                    'Retry',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             ),
@@ -63,7 +69,12 @@ class TripDetailScreen extends StatelessWidget {
         if (trip == null) return const SizedBox.shrink();
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.of(context).padding.bottom,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -136,17 +147,67 @@ class TripDetailScreen extends StatelessWidget {
                   ),
                 ),
 
+              const SizedBox(height: 12),
+
+              // ── Advance History ─────────────────────────────────────────
+              Obx(() {
+                final advances = controller.advances;
+                final loading = controller.isLoadingAdvances.value;
+                if (loading && advances.isEmpty) {
+                  return _SectionCard(
+                    title: 'Advance Requests',
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF1B2A49),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                if (advances.isEmpty) {
+                  return _SectionCard(
+                    title: 'Advance Requests',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 20),
+                      child: Center(
+                        child: Text(
+                          'No advance requests yet',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return _SectionCard(
+                  title: 'Advance Requests',
+                  child: Column(
+                    children:
+                        advances.map((adv) => _AdvanceRow(adv: adv)).toList(),
+                  ),
+                );
+              }),
+
               const SizedBox(height: 24),
 
               // ── Action Buttons ───────────────────────────────────────────
-              Obx(() => _ActionButtons(
-                    trip: trip,
-                    isLoading: controller.isActionLoading.value,
-                    onStart: controller.startTrip,
-                    onConfirmPickup: controller.confirmPickup,
-                    onComplete: controller.completeTrip,
-                    onRequestAdvance: controller.requestAdvance,
-                  )),
+              Obx(
+                () => _ActionButtons(
+                  trip: trip,
+                  isLoading: controller.isActionLoading.value,
+                  onStart: controller.startTrip,
+                  onConfirmPickup: controller.confirmPickup,
+                  onComplete: controller.completeTrip,
+                  onRequestAdvance: controller.requestAdvance,
+                  onGoToActiveTrip: controller.goToActiveTrip,
+                ),
+              ),
             ],
           ),
         );
@@ -180,7 +241,7 @@ class _StatusCard extends StatelessWidget {
                 trip.tripCode ?? 'Trip #${trip.tripId}',
                 style: GoogleFonts.poppins(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -193,8 +254,7 @@ class _StatusCard extends StatelessWidget {
           ),
           const Spacer(),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
@@ -205,9 +265,10 @@ class _StatusCard extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: trip.isCompleted
-                        ? Colors.greenAccent
-                        : trip.isCancelled
+                    color:
+                        trip.isCompleted
+                            ? Colors.greenAccent
+                            : trip.isCancelled
                             ? Colors.redAccent
                             : Colors.amberAccent,
                     shape: BoxShape.circle,
@@ -217,9 +278,10 @@ class _StatusCard extends StatelessWidget {
                 Text(
                   trip.status,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600),
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -245,18 +307,14 @@ class _SectionCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Text(
               title,
               style: GoogleFonts.poppins(
@@ -301,17 +359,23 @@ class _InfoTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade500,
-                      fontWeight: FontWeight.w500)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(value,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF1B2A49),
-                      fontWeight: FontWeight.w600)),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1B2A49),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ],
@@ -329,6 +393,7 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onConfirmPickup;
   final VoidCallback onComplete;
   final VoidCallback onRequestAdvance;
+  final VoidCallback onGoToActiveTrip;
 
   const _ActionButtons({
     required this.trip,
@@ -337,10 +402,12 @@ class _ActionButtons extends StatelessWidget {
     required this.onConfirmPickup,
     required this.onComplete,
     required this.onRequestAdvance,
+    required this.onGoToActiveTrip,
   });
 
   @override
   Widget build(BuildContext context) {
+    // ── Completed / Cancelled ─────────────────────────────────────────────
     if (trip.isCompleted || trip.isCancelled) {
       return Container(
         padding: const EdgeInsets.all(14),
@@ -371,54 +438,29 @@ class _ActionButtons extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: [
-        // Advance request — always available during active trip
-        if (trip.isAccepted || trip.isOnGoing)
-          _ActionButton(
-            label: TrKeys.requestAdvance.tr,
-            icon: Icons.request_quote_rounded,
-            color: const Color(0xFF2E6B9E),
-            isLoading: false,
-            onTap: onRequestAdvance,
-          ),
+    // ── OnGoing — show "View Active Trip" to re-enter the active trip page ──
+    if (trip.isOnGoing) {
+      return _ActionButton(
+        label: 'View Active Trip',
+        icon: Icons.navigation_rounded,
+        color: const Color(0xFF27AE60),
+        isLoading: false,
+        onTap: onGoToActiveTrip,
+      );
+    }
 
-        const SizedBox(height: 10),
+    // ── Accepted — single "Start Trip & Enable Tracking" button ─────────────
+    if (trip.isAccepted) {
+      return _ActionButton(
+        label: 'Start Trip & Enable Tracking',
+        icon: Icons.navigation_rounded,
+        color: const Color(0xFF27AE60),
+        isLoading: isLoading,
+        onTap: onStart,
+      );
+    }
 
-        // Start Trip — only if accepted but not yet started
-        if (trip.isAccepted && !trip.isOnGoing)
-          _ActionButton(
-            label: TrKeys.startTrip.tr,
-            icon: Icons.play_arrow_rounded,
-            color: const Color(0xFF274472),
-            isLoading: isLoading,
-            onTap: onStart,
-          ),
-
-        // Confirm Pickup — available after starting
-        if (trip.isOnGoing)
-          _ActionButton(
-            label: TrKeys.confirmPickup.tr,
-            icon: Icons.check_rounded,
-            color: Colors.green.shade700,
-            isLoading: isLoading,
-            onTap: onConfirmPickup,
-          ),
-
-        // Complete Trip — available after pickup confirmed
-        if (trip.isOnGoing)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: _ActionButton(
-              label: TrKeys.completeTrip.tr,
-              icon: Icons.flag_rounded,
-              color: const Color(0xFF1B2A49),
-              isLoading: isLoading,
-              onTap: onComplete,
-            ),
-          ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 }
 
@@ -444,14 +486,17 @@ class _ActionButton extends StatelessWidget {
       height: 52,
       child: ElevatedButton.icon(
         onPressed: isLoading ? null : onTap,
-        icon: isLoading
-            ? const SizedBox(
-                height: 18,
-                width: 18,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2),
-              )
-            : Icon(icon, color: Colors.white, size: 20),
+        icon:
+            isLoading
+                ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+                : Icon(icon, color: Colors.white, size: 20),
         label: Text(
           label,
           style: GoogleFonts.poppins(
@@ -463,10 +508,129 @@ class _ActionButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           disabledBackgroundColor: color.withValues(alpha: 0.5),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           elevation: 2,
         ),
+      ),
+    );
+  }
+}
+
+// ── Advance Row (reused from trip_history_detail_screen pattern) ──────────────
+
+class _AdvanceRow extends StatelessWidget {
+  final TripAdvanceModel adv;
+  const _AdvanceRow({required this.adv});
+
+  Color get _statusColor {
+    switch ((adv.status ?? '').toLowerCase()) {
+      case 'approved':
+        return const Color(0xFF27AE60);
+      case 'rejected':
+        return Colors.redAccent;
+      case 'paid':
+        return Colors.blue;
+      default:
+        return const Color(0xFFE67E22);
+    }
+  }
+
+  IconData get _statusIcon {
+    switch ((adv.status ?? '').toLowerCase()) {
+      case 'approved':
+        return Icons.check_circle_rounded;
+      case 'rejected':
+        return Icons.cancel_rounded;
+      case 'paid':
+        return Icons.payments_rounded;
+      default:
+        return Icons.hourglass_top_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: _statusColor.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(_statusIcon, color: _statusColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '₹${adv.requestedAmount?.toStringAsFixed(0) ?? '0'}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1B2A49),
+                  ),
+                ),
+                if (adv.requestorComments != null &&
+                    adv.requestorComments!.isNotEmpty)
+                  Text(
+                    adv.requestorComments!,
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.grey.shade500),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (adv.paymentMode != null)
+                  Text(
+                    adv.paymentMode!,
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.grey.shade400),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  adv.status ?? 'Pending',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _statusColor,
+                  ),
+                ),
+              ),
+              if ((adv.status ?? '').toLowerCase() == 'approved' &&
+                  adv.approvedAmount != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '₹${adv.approvedAmount?.toStringAsFixed(0)} paid',
+                  style: GoogleFonts.poppins(
+                      fontSize: 11, color: const Color(0xFF27AE60)),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }

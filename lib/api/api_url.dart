@@ -32,6 +32,14 @@ class ApiUrl {
   static String getTripTransactions = 'Trip/GetAllTripTransactionHistory';
   static String getCurrentSalaryStatus = 'Trip/GetCurrentStatusForSalary';
 
+  // ── Trip Documents ────────────────────────────────────────────────────────
+  static String uploadTripDocument = 'Trip/UploadTripDocument';
+  static String getTripDocuments   = 'Trip/GetTripDocuments';
+
+  // ── Trip Expenses ─────────────────────────────────────────────────────────
+  static String createTripExpense = 'TripTransaction/CreateTripTransaction';
+  static String getTripExpenses   = 'TripTransaction/GetExpensesDetailsByTripId';
+
   // ── Notifications ─────────────────────────────────────────────────────────
   static String getUserNotifications = 'Notification/GetUserNotifications';
   static String markNotificationRead = 'Notification/MarkAsRead';

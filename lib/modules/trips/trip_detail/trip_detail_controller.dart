@@ -11,8 +11,10 @@ class TripDetailController extends GetxController {
   final ImagePicker _picker = ImagePicker();
 
   Rxn<TripModel> trip = Rxn<TripModel>();
+  RxList<TripAdvanceModel> advances = <TripAdvanceModel>[].obs;
   RxBool isLoading = false.obs;
   RxBool isActionLoading = false.obs;
+  RxBool isLoadingAdvances = false.obs;
   RxString error = ''.obs;
 
   late int tripId;
@@ -32,6 +34,7 @@ class TripDetailController extends GetxController {
       final t = await _service.getTripById(tripId);
       if (t != null) {
         trip.value = t;
+        loadAdvances();
       } else {
         error.value = 'Trip not found.';
       }
@@ -42,19 +45,34 @@ class TripDetailController extends GetxController {
     }
   }
 
+  Future<void> loadAdvances() async {
+    isLoadingAdvances.value = true;
+    try {
+      advances.value = await _service.getAdvancesByTrip(tripId);
+    } catch (_) {
+      // Silently fail — advances section will show "no advances"
+    } finally {
+      isLoadingAdvances.value = false;
+    }
+  }
+
   // ── Driver Actions ─────────────────────────────────────────────────────────
 
   Future<void> startTrip() async {
     await _performAction(() async {
-      // status 2 = Started/OnGoing (based on TripStatusEnum)
-      final ok = await _service.updateTripStatus(tripId, 2);
+      // status 4 = Started
+      final ok = await _service.updateTripStatus(tripId, 4);
       if (ok) {
         Dialogues.successToast('Trip started! GPS tracking enabled.');
-        await loadTrip();
+        Get.toNamed(AppRoute.activeTrip, arguments: {'tripId': tripId});
       } else {
         Dialogues.warningToast('Could not start trip. Please retry.');
       }
     });
+  }
+
+  void goToActiveTrip() {
+    Get.toNamed(AppRoute.activeTrip, arguments: {'tripId': tripId});
   }
 
   Future<void> confirmPickup() async {
@@ -96,8 +114,8 @@ class TripDetailController extends GetxController {
         return;
       }
 
-      // status 4 = Completed
-      final ok = await _service.updateTripStatus(tripId, 4);
+      // status 7 = Completed
+      final ok = await _service.updateTripStatus(tripId, 7);
       if (ok) {
         Dialogues.successToast(
           'Trip completed! Salary request is now pending.',
@@ -111,7 +129,8 @@ class TripDetailController extends GetxController {
   }
 
   Future<void> requestAdvance() async {
-    Get.toNamed(AppRoute.advance, arguments: {'tripId': tripId});
+    await Get.toNamed(AppRoute.advance, arguments: {'tripId': tripId});
+    await loadAdvances(); // Refresh advances on return from advance screen
   }
 
   Future<void> _performAction(Future<void> Function() action) async {

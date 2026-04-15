@@ -16,14 +16,22 @@ class AssignedTripsController extends GetxController {
     loadTrips();
   }
 
+  /// Trips awaiting driver acceptance (status = Planned / PendingDriverAcceptance).
+  List<TripModel> get pendingTrips =>
+      trips.where((t) => t.isPendingAcceptance).toList();
+
+  /// Active trips already accepted / ongoing.
+  List<TripModel> get acceptedTrips =>
+      trips.where((t) => !t.isPendingAcceptance).toList();
+
   Future<void> loadTrips() async {
     isLoading.value = true;
     error.value = '';
     try {
       final all = await _service.getAllTrips();
-      // Show only active/pending trips
+      // Keep only active trips (exclude completed, cancelled, driver-rejected)
       trips.value = all
-          .where((t) => !t.isCompleted && !t.isCancelled)
+          .where((t) => !t.isCompleted && !t.isCancelled && !t.isDriverRejected)
           .toList();
     } catch (e) {
       error.value = 'Failed to load trips. Tap retry.';

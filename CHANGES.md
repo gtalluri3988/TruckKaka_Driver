@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-04-15 — Fix: Advance request history not displaying + Trip Detail enhancements
+
+**Root Cause:** `getAdvancesByTrip()` in `trip_service.dart` tried `res.data['result']` on a bare array response from the API — caused silent TypeError, returned empty list.
+
+| Timestamp | File | Action | Requirement |
+|-----------|------|--------|-------------|
+| 2026-04-15 | `lib/services/trip_service.dart` — `getAdvancesByTrip()` | Fixed response parsing to handle both `{result: [...]}` (wrapped) and `[...]` (bare array) formats | API returned bare array but service expected wrapped — silent TypeError returned empty list |
+| 2026-04-15 | `lib/modules/trips/trip_detail/trip_detail_controller.dart` | Added `advances` RxList, `isLoadingAdvances`, `loadAdvances()` method; `requestAdvance()` now awaits navigation and refreshes on return | Trip detail screen had no advance data; no refresh after submitting advance request |
+| 2026-04-15 | `lib/modules/trips/trip_detail/trip_detail_screen.dart` | Added advance history section with `_AdvanceRow` widget (reused pattern from `trip_history_detail_screen.dart`); shows loading/empty/list states | Advance history was only visible on separate Advance screen, not on Trip Detail |
+
+---
+
 ## 1. Firebase Configuration Fix
 **File:** `lib/firebase_options.dart`
 

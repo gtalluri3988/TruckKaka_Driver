@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +65,23 @@ class OtpController extends GetxController {
     // TODO: call resend API when backend exposes it
   }
 
+  /// Fire-and-forget: save the current FCM token to the server.
+  /// Called after successful OTP verification so the UserFCMToken table
+  /// always holds the latest token (it can rotate between app installs).
+  Future<void> _saveFcmTokenSilently() async {
+    try {
+      final tokenModel = await StoredData.getTokenModel();
+      final userId = int.tryParse(tokenModel?.userId ?? '');
+      if (userId == null) return;
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken == null) return;
+      await AuthService().saveFcmToken(userId, fcmToken);
+      log('FCM token refreshed for userId=$userId');
+    } catch (e) {
+      log('_saveFcmTokenSilently error: $e');
+    }
+  }
+
   Future<void> verifyOtp() async {
     if (mobile.value.isEmpty || otpController.text.length < 4) {
       Dialogues.warningToast('Please enter the OTP');
@@ -93,6 +111,11 @@ class OtpController extends GetxController {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(StorageKeys.login, jsonEncode(loginData.toJson()));
+
+        // ── Refresh FCM token on server ───────────────────────────────────
+        // Ensures the token stored in UserFCMToken table is always current,
+        // even if the token rotated since the last Register/RegisterUser call.
+        _saveFcmTokenSilently();
 
         // Fetch user profile (language/role flags)
         final userByMobile = await AuthService().getUserByMobile(mobile.value);

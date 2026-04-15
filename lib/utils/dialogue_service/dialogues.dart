@@ -88,6 +88,52 @@ class Dialogues {
       ),
     );
   }
+
+  /// Confirm dialog that returns true if confirmed, false/null if cancelled.
+  static Future<bool?> confirmAsync({
+    required String title,
+    required String message,
+    String confirmText = 'Confirm',
+    String cancelText = 'Cancel',
+    Color confirmColor = const Color(0xFF1B2A49),
+  }) async {
+    return showDialog<bool>(
+      context: Get.context!,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF1B2A49),
+          ),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(cancelText,
+                style: GoogleFonts.poppins(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: confirmColor,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirmText,
+                style: GoogleFonts.poppins(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ToastWidget extends StatelessWidget {

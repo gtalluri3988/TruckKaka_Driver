@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer';
 import 'package:dio/dio.dart';
 import '../api/api_service.dart';
@@ -12,7 +13,9 @@ class TripService {
     try {
       final res = await ApiService.get(url: ApiUrl.getAllTrips);
       if (res.statusCode == 200 && res.data != null) {
-        final list = res.data['result'] as List? ?? [];
+        // API returns a raw array [...], not a wrapped { result: [...] }
+        final raw = res.data;
+        final list = (raw is List ? raw : (raw['result'] as List?)) ?? [];
         return list
             .map((e) => TripModel.fromJson(e as Map<String, dynamic>))
             .toList();
@@ -184,7 +187,16 @@ class TripService {
         queryParameters: {'tripId': tripId},
       );
       if (res.statusCode == 200 && res.data != null) {
-        final list = res.data['result'] as List? ?? res.data as List? ?? [];
+        final raw = res.data;
+        // Handle both wrapped {result: [...]} and bare [...] response formats
+        final List list;
+        if (raw is Map<String, dynamic>) {
+          list = raw['result'] as List? ?? [];
+        } else if (raw is List) {
+          list = raw;
+        } else {
+          list = [];
+        }
         return list
             .map((e) => TripAdvanceModel.fromJson(e as Map<String, dynamic>))
             .toList();
@@ -212,6 +224,119 @@ class TripService {
       log('getTripTransactions error: $e');
     }
     return null;
+  }
+
+  // ── Trip Expenses ──────────────────────────────────────────────────────────
+
+  /// All expenses recorded for a trip.
+  Future<List<TripExpenseModel>> getTripExpenses(int tripId) async {
+    try {
+      final res = await ApiService.get(
+        url: ApiUrl.getTripExpenses,
+        queryParameters: {'tripId': tripId},
+      );
+      if (res.statusCode == 200 && res.data != null) {
+        // API returns { TripTransaction: [...] }
+        final raw = res.data;
+        final list = (raw['TripTransaction'] as List?) ??
+            (raw['tripTransaction'] as List?) ??
+            (raw is List ? raw as List : []);
+        return list
+            .map((e) => TripExpenseModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      log('getTripExpenses error: $e');
+    }
+    return [];
+  }
+
+  /// Add a new expense (with optional receipt image).
+  Future<bool> createTripExpense({
+    required int tripId,
+    required int expenseTypeId,
+    required double amount,
+    String? notes,
+    String? receiptPath,
+  }) async {
+    try {
+      final dto = {
+        'tripId': tripId,
+        'expenseTypeId': expenseTypeId,
+        'amount': amount,
+        'notes': notes ?? '',
+        'transactionDate': DateTime.now().toIso8601String(),
+      };
+
+      final Map<String, dynamic> formMap = {
+        'expenesModel': jsonEncode(dto),
+      };
+
+      if (receiptPath != null && receiptPath.isNotEmpty) {
+        formMap['files'] = await MultipartFile.fromFile(receiptPath);
+      }
+
+      final res = await ApiService.postWithFormData(
+        url: ApiUrl.createTripExpense,
+        data: FormData.fromMap(formMap),
+      );
+      return res.statusCode == 200;
+    } catch (e) {
+      log('createTripExpense error: $e');
+      return false;
+    }
+  }
+
+  // ── Trip Documents ────────────────────────────────────────────────────────
+
+  /// Upload a document for a trip.
+  /// [documentType]: "pickup" or "received"
+  /// "pickup" → API sets TripStatus = PickupConfirmed(5)
+  /// "received" → API sets TripStatus = Completed(7)
+  Future<List<TripDocumentModel>> uploadTripDocument({
+    required int tripId,
+    required String documentType,
+    required String filePath,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'tripId': tripId,
+        'documentType': documentType,
+        'files': await MultipartFile.fromFile(filePath),
+      });
+      final res = await ApiService.postWithFormData(
+        url: ApiUrl.uploadTripDocument,
+        data: formData,
+      );
+      if (res.statusCode == 200 && res.data != null) {
+        final list = (res.data['result'] as List?) ?? [];
+        return list
+            .map((e) => TripDocumentModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      log('uploadTripDocument error: $e');
+    }
+    return [];
+  }
+
+  /// Get all documents for a trip (pickup + received).
+  Future<List<TripDocumentModel>> getTripDocuments(int tripId) async {
+    try {
+      final res = await ApiService.get(
+        url: ApiUrl.getTripDocuments,
+        queryParameters: {'tripId': tripId},
+      );
+      if (res.statusCode == 200 && res.data != null) {
+        final list = (res.data['result'] as List?) ?? [];
+        return list
+            .map((e) => TripDocumentModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      log('getTripDocuments error: $e');
+    }
+    return [];
   }
 
   /// Get current salary approval status for a trip.

@@ -17,8 +17,12 @@ import '../modules/trips/assigned_trips/assigned_trips_screen.dart';
 import '../modules/trips/assigned_trips/assigned_trips_controller.dart';
 import '../modules/trips/trip_history/trip_history_screen.dart';
 import '../modules/trips/trip_history/trip_history_controller.dart';
+import '../modules/trips/trip_history/trip_history_detail_screen.dart';
+import '../modules/trips/trip_history/trip_history_detail_controller.dart';
 import '../modules/trips/trip_detail/trip_detail_screen.dart';
 import '../modules/trips/trip_detail/trip_detail_controller.dart';
+import '../modules/trips/active_trip/active_trip_screen.dart';
+import '../modules/trips/active_trip/active_trip_controller.dart';
 import '../modules/advance/advance_screen.dart';
 import '../modules/advance/advance_controller.dart';
 import '../modules/salary/salary_screen.dart';
@@ -33,7 +37,9 @@ class AppRoute {
   static const String dashboard = '/dashboard';
   static const String assignedTrips = '/assigned-trips';
   static const String tripHistory = '/trip-history';
+  static const String tripHistoryDetail = '/trip-history-detail';
   static const String tripDetail = '/trip-detail';
+  static const String activeTrip = '/active-trip';
   static const String advance = '/advance';
   static const String salary = '/salary';
   static const String unknown = '/404';
@@ -90,10 +96,25 @@ class AppRoute {
       }),
     ),
     GetPage(
+      name: tripHistoryDetail,
+      page: () => const TripHistoryDetailScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut<TripHistoryDetailController>(
+            () => TripHistoryDetailController(), fenix: true);
+      }),
+    ),
+    GetPage(
       name: tripDetail,
       page: () => const TripDetailScreen(),
       binding: BindingsBuilder(() {
         Get.lazyPut<TripDetailController>(() => TripDetailController(), fenix: true);
+      }),
+    ),
+    GetPage(
+      name: activeTrip,
+      page: () => const ActiveTripScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut<ActiveTripController>(() => ActiveTripController(), fenix: true);
       }),
     ),
     GetPage(
