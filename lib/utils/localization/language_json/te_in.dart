@@ -69,4 +69,13 @@ final Map<String, String> teIN = {
       'మీరు ఏ యజమానికి కేటాయించబడలేదు. అడ్మిన్‌ని సంప్రదించండి.',
   TrKeys.kycIncomplete:
       'KYC అసంపూర్ణం. దయచేసి మీ లైసెన్స్ అప్‌లోడ్ చేయండి.',
+
+  // Tracking
+  TrKeys.trackingActive: 'ట్రిప్ ట్రాకింగ్ యాక్టివ్‌గా ఉంది',
+  TrKeys.trackingStarted: 'GPS ట్రాకింగ్ ప్రారంభమైంది',
+  TrKeys.trackingStopped: 'GPS ట్రాకింగ్ ఆపివేయబడింది',
+  TrKeys.gpsDisabled: 'GPS ఆఫ్ ఉంది. దయచేసి లొకేషన్ ఆన్ చేయండి.',
+  TrKeys.enableGps: 'GPS ఆన్ చేయండి',
+  TrKeys.locationPermissionRequired: 'ట్రిప్ ట్రాకింగ్ కోసం లొకేషన్ అనుమతి అవసరం.',
+  TrKeys.backgroundLocationRequired: 'మీ ట్రిప్ ట్రాక్ చేయడానికి బ్యాక్‌గ్రౌండ్ లొకేషన్ యాక్సెస్ అవసరం.',
 };

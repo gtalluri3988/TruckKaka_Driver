@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import '../firebase_options.dart';
 import '../modules/home/home_controller.dart';
 import '../routes/app_routes.dart';
+import '../services/background_tracking_service.dart';
 import '../utils/local_storage/stored_data.dart';
 
 /// Top-level FCM background handler — must be a top-level function.
@@ -54,6 +55,9 @@ class AppInit {
     await _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_channel);
+
+    // ── Background tracking service ──────────────────────────────────────────────
+    await BackgroundTrackingService.initialize();
 
     // ── Cold start (app was KILLED, user taps notification) ──────────────────────
     // Splash → auth check → /dashboard → HomeController.onReady → _checkActiveTrip

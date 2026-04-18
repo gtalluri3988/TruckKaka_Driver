@@ -24,16 +24,28 @@ class ApiService {
             options.headers['Authorization'] = 'Bearer $token';
           }
 
-          log('REQUEST → ${options.uri}');
-          log('Headers: ${options.headers}');
+          // Use print() — log() from dart:developer is unreliable in background
+          // isolates (where the tracking service runs).
+          final authHeader = options.headers['Authorization'];
+          final authPreview = authHeader is String && authHeader.length > 20
+              ? '${authHeader.substring(0, 20)}…(${authHeader.length}ch)'
+              : (authHeader?.toString() ?? 'MISSING');
+          // ignore: avoid_print
+          print('REQUEST → ${options.method} ${options.uri} '
+              'auth=$authPreview isAuth=$isAuthenticated');
           handler.next(options);
         },
         onResponse: (response, handler) {
-          log('RESPONSE ← ${response.statusCode} ${response.requestOptions.uri}');
+          // ignore: avoid_print
+          print('RESPONSE ← ${response.statusCode} '
+              '${response.requestOptions.uri}');
           handler.next(response);
         },
         onError: (error, handler) {
-          log('ERROR ← $error');
+          // ignore: avoid_print
+          print('ERROR ← ${error.response?.statusCode} '
+              '${error.requestOptions.uri} '
+              'body=${error.response?.data}');
           handler.next(error);
         },
       ),
@@ -83,8 +95,16 @@ class ApiService {
         queryParameters: queryParameters,
         options: dio.Options(headers: {'Content-Type': 'application/json'}),
       );
-    } on dio.DioException {
-      return dio.Response(requestOptions: dio.RequestOptions());
+    } on dio.DioException catch (e) {
+      // Surface the real failure so callers can see it in logcat.
+      // The response is still an empty shell so non-exception callers keep working.
+      // ignore: avoid_print
+      print('ApiService.post FAILED url=${ApiUrl.baseUrl}$url '
+          'type=${e.type} message=${e.message} '
+          'responseStatus=${e.response?.statusCode} '
+          'responseBody=${e.response?.data}');
+      return e.response ??
+          dio.Response(requestOptions: dio.RequestOptions(path: url));
     }
   }
 
@@ -116,8 +136,14 @@ class ApiService {
         '${ApiUrl.baseUrl}$url',
         queryParameters: queryParameters,
       );
-    } on dio.DioException {
-      return dio.Response(requestOptions: dio.RequestOptions());
+    } on dio.DioException catch (e) {
+      // ignore: avoid_print
+      print('ApiService.get FAILED url=${ApiUrl.baseUrl}$url '
+          'type=${e.type} message=${e.message} '
+          'responseStatus=${e.response?.statusCode} '
+          'responseBody=${e.response?.data}');
+      return e.response ??
+          dio.Response(requestOptions: dio.RequestOptions(path: url));
     }
   }
 

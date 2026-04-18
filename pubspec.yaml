@@ -46,6 +46,12 @@ dependencies:
   # Internationalization
   intl: ^0.20.2
 
+  # GPS & Background Location Tracking
+  geolocator: ^14.0.0
+  flutter_background_service: ^5.0.12
+  flutter_background_service_android: ^6.2.7
+  sqflite: ^2.4.1
+
   # Utilities
   url_launcher: ^6.3.0
   permission_handler: ^12.0.1

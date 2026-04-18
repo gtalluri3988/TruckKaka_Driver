@@ -2,6 +2,47 @@
 
 ---
 
+## 2026-04-16 — Feature: Mobile-based Background GPS Tracking System
+
+Production-grade background location tracking that survives app kill, handles offline storage, and syncs batched GPS data to the API.
+
+### New Packages
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `geolocator` | ^14.0.0 | GPS with accuracy, speed, heading, mock detection |
+| `flutter_background_service` | ^5.0.12 | Android foreground service (survives app kill) |
+| `flutter_background_service_android` | ^6.2.7 | Android-specific foreground service types |
+| `sqflite` | ^2.4.1 | SQLite offline queue for GPS points |
+
+### New Files
+
+| Timestamp | File | Action | Requirement |
+|-----------|------|--------|-------------|
+| 2026-04-16 | `lib/model/location_model.dart` | Created LocationPoint (with SQLite row mapping), BulkUploadResponse, TrackingConfig models | Data models for offline queue, API upload, and server-configurable thresholds |
+| 2026-04-16 | `lib/services/location_service.dart` | Created GPS wrapper: permission check/request, GPS enabled check, stream-based tracking with smart intervals (speed > 2 m/s = 15s, else 120s), accuracy filter (>50m rejected), distance filter (<10m ignored), mock location detection via geolocator's `isMocked` | Core GPS engine with all filtering logic — configurable thresholds from server |
+| 2026-04-16 | `lib/services/location_queue_service.dart` | Created SQLite-backed offline queue: `location_queue` table with indexed `synced` column. Methods: enqueue(), getUnsyncedBatch(limit), markSynced(ids), cleanup(>24h), pendingCount() | GPS points must survive network outages — SharedPreferences unreliable for structured batch data at volume |
+| 2026-04-16 | `lib/services/location_sync_service.dart` | Created HTTP batch upload service: POST /api/Tracking/BulkUpload with array of LocationPoints. Returns updated config. Also fetchConfig() for initial load | Dequeues pending points, uploads, marks synced. Server response includes updated config parameters |
+| 2026-04-16 | `lib/services/background_tracking_service.dart` | Created foreground service orchestrator using flutter_background_service. `@pragma('vm:entry-point')` isolate entry. Persistent notification "TruckKaka - Trip tracking active". GPS stream -> enqueue to SQLite -> periodic sync every 30s. Handles start/stop commands from main isolate | Must survive app minimization, recents clearing, and device sleep. Foreground service is the only reliable approach on Android 10+ |
+
+### Modified Files
+
+| Timestamp | File | Action | Requirement |
+|-----------|------|--------|-------------|
+| 2026-04-16 | `pubspec.yaml` | Added geolocator, flutter_background_service, flutter_background_service_android, sqflite | New tracking dependencies |
+| 2026-04-16 | `android/app/src/main/AndroidManifest.xml` | Added FOREGROUND_SERVICE, FOREGROUND_SERVICE_LOCATION, WAKE_LOCK permissions. Added BackgroundService declaration with `foregroundServiceType="location"` | Android requires explicit foreground service declaration for background GPS |
+| 2026-04-16 | `lib/api/api_url.dart` | Added `trackingBulkUpload` and `trackingConfig` endpoint constants | API URL contract for tracking endpoints |
+| 2026-04-16 | `lib/utils/local_storage/stored_keys.dart` | Added trackingTripId, trackingDriverId, trackingEnabled, trackingConfig keys | Background service isolate reads persisted trip/driver IDs |
+| 2026-04-16 | `lib/app/app_init.dart` | Added `BackgroundTrackingService.initialize()` in AppInit.initialize() | Background service must be configured before first use |
+| 2026-04-16 | `lib/modules/trips/trip_detail/trip_detail_controller.dart` | In `startTrip()`: added `BackgroundTrackingService.startTracking(tripId, driverId)` after successful status update. In `completeTrip()`: added `BackgroundTrackingService.stopTracking()` before status update | Tracking starts when driver starts trip, stops when driver completes trip |
+| 2026-04-16 | `lib/modules/home/home_controller.dart` | In `_checkActiveTrip()`: if active ongoing trip exists and tracking not running, resume via `BackgroundTrackingService.startTracking()` | Tracking must auto-resume after app restart if trip is still active |
+| 2026-04-16 | `lib/utils/localization/translation_keys.dart` | Added 7 tracking keys: trackingActive, trackingStarted, trackingStopped, gpsDisabled, enableGps, locationPermissionRequired, backgroundLocationRequired | Localization support for tracking UI messages |
+| 2026-04-16 | `lib/utils/localization/language_json/en_us.dart` | Added English translations for 7 tracking keys | English locale |
+| 2026-04-16 | `lib/utils/localization/language_json/hi_in.dart` | Added Hindi translations for 7 tracking keys | Hindi locale |
+| 2026-04-16 | `lib/utils/localization/language_json/te_in.dart` | Added Telugu translations for 7 tracking keys | Telugu locale |
+
+---
+
 ## 2026-04-15 — Fix: Advance request history not displaying + Trip Detail enhancements
 
 **Root Cause:** `getAdvancesByTrip()` in `trip_service.dart` tried `res.data['result']` on a bare array response from the API — caused silent TypeError, returned empty list.

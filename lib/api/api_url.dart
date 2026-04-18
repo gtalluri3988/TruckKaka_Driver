@@ -1,8 +1,8 @@
 class ApiUrl {
   // 🔧 DEV: Use local machine IP for physical device testing.
   //        Change to production URL before release.
-  static String baseUrl = 'http://192.168.29.198:5032/api/';
-  // static String baseUrl = 'https://www.asva.co.in/TransportApi/api/';
+  // static String baseUrl = 'http://192.168.29.198:5032/api/';
+  static String baseUrl = 'https://www.asva.co.in/TransportApi/api/';
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   static String register = 'Register/RegisterUser';
@@ -34,14 +34,18 @@ class ApiUrl {
 
   // ── Trip Documents ────────────────────────────────────────────────────────
   static String uploadTripDocument = 'Trip/UploadTripDocument';
-  static String getTripDocuments   = 'Trip/GetTripDocuments';
+  static String getTripDocuments = 'Trip/GetTripDocuments';
 
   // ── Trip Expenses ─────────────────────────────────────────────────────────
   static String createTripExpense = 'TripTransaction/CreateTripTransaction';
-  static String getTripExpenses   = 'TripTransaction/GetExpensesDetailsByTripId';
+  static String getTripExpenses = 'TripTransaction/GetExpensesDetailsByTripId';
 
   // ── Notifications ─────────────────────────────────────────────────────────
   static String getUserNotifications = 'Notification/GetUserNotifications';
   static String markNotificationRead = 'Notification/MarkAsRead';
   static String markAllNotificationsRead = 'Notification/MarkAllRead';
+
+  // ── Tracking ────────────────────────────────────────────────────────────
+  static String trackingBulkUpload = 'Tracking/BulkUpload';
+  static String trackingConfig = 'Tracking/GetConfig';
 }

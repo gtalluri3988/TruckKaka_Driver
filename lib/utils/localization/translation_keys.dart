@@ -77,6 +77,15 @@ class TrKeys {
   static const String km = 'km';
   static const String rupee = 'rupee';
 
+  // Tracking
+  static const String trackingActive = 'trackingActive';
+  static const String trackingStarted = 'trackingStarted';
+  static const String trackingStopped = 'trackingStopped';
+  static const String gpsDisabled = 'gpsDisabled';
+  static const String enableGps = 'enableGps';
+  static const String locationPermissionRequired = 'locationPermissionRequired';
+  static const String backgroundLocationRequired = 'backgroundLocationRequired';
+
   // Errors
   static const String notAssignedToOwner = 'notAssignedToOwner';
   static const String kycIncomplete = 'kycIncomplete';

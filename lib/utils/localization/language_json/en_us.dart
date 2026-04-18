@@ -79,6 +79,15 @@ final Map<String, String> enUS = {
   TrKeys.km: 'km',
   TrKeys.rupee: '₹',
 
+  // Tracking
+  TrKeys.trackingActive: 'Trip tracking is active',
+  TrKeys.trackingStarted: 'GPS tracking started',
+  TrKeys.trackingStopped: 'GPS tracking stopped',
+  TrKeys.gpsDisabled: 'GPS is disabled. Please turn on location.',
+  TrKeys.enableGps: 'Enable GPS',
+  TrKeys.locationPermissionRequired: 'Location permission is required for trip tracking.',
+  TrKeys.backgroundLocationRequired: 'Background location access is needed to track your trip.',
+
   // Errors
   TrKeys.notAssignedToOwner:
       'You are not assigned to any owner. Contact admin.',

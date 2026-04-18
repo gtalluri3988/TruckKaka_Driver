@@ -68,4 +68,13 @@ final Map<String, String> hiIN = {
   TrKeys.notAssignedToOwner:
       'आप किसी मालिक को नहीं सौंपे गए हैं। व्यवस्थापक से संपर्क करें।',
   TrKeys.kycIncomplete: 'KYC अपूर्ण है। कृपया अपना लाइसेंस अपलोड करें।',
+
+  // Tracking
+  TrKeys.trackingActive: 'ट्रिप ट्रैकिंग चालू है',
+  TrKeys.trackingStarted: 'GPS ट्रैकिंग शुरू हो गई',
+  TrKeys.trackingStopped: 'GPS ट्रैकिंग रुक गई',
+  TrKeys.gpsDisabled: 'GPS बंद है। कृपया लोकेशन चालू करें।',
+  TrKeys.enableGps: 'GPS चालू करें',
+  TrKeys.locationPermissionRequired: 'ट्रिप ट्रैकिंग के लिए लोकेशन अनुमति आवश्यक है।',
+  TrKeys.backgroundLocationRequired: 'आपकी ट्रिप ट्रैक करने के लिए बैकग्राउंड लोकेशन एक्सेस ज़रूरी है।',
 };

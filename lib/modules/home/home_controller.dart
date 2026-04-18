@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import '../../model/trip_model.dart';
 import '../../routes/app_routes.dart';
+import '../../services/background_tracking_service.dart';
 import '../../services/trip_service.dart';
 import '../../utils/dialogue_service/dialogues.dart';
 import '../../utils/local_storage/stored_data.dart';
@@ -40,6 +42,35 @@ class HomeController extends GetxController {
         if (trip.isPendingAcceptance) {
           await _showTripAssignedDialog(trip);
         }
+        // Resume background tracking if trip is ongoing.
+        // We ALWAYS verify permission in the UI first — the background
+        // isolate cannot show the system dialog, so if permission was
+        // revoked or never granted, the service silently dies and
+        // isRunning() can still return true (zombie container).
+        if (trip.isOnGoing && driverId.value.isNotEmpty) {
+          final isTracking = await BackgroundTrackingService.isRunning();
+          debugPrint('HomeController: active trip ${trip.tripId} isOnGoing, '
+              'service running=$isTracking');
+
+          final permissionOk = await _ensureLocationPermission();
+          if (!permissionOk) {
+            // Tear down any zombie service — it can't collect GPS
+            // without permission and will keep crashing silently.
+            if (isTracking) {
+              await BackgroundTrackingService.stopTracking();
+            }
+            return;
+          }
+
+          // Permission is granted — always call startTracking so any zombie
+          // isolate from a previous APK install gets force-restarted with
+          // the current code. startTracking handles the idempotent case.
+          await BackgroundTrackingService.startTracking(
+            trip.tripId ?? 0,
+            int.tryParse(driverId.value) ?? 0,
+          );
+          debugPrint('HomeController: tracking (re)started for trip ${trip.tripId}');
+        }
       }
     } catch (e) {
       debugPrint('checkActiveTrip error: $e');
@@ -49,6 +80,73 @@ class HomeController extends GetxController {
   }
 
   Future<void> refreshActiveTrip() => _checkActiveTrip();
+
+  // Track whether we've already nudged the user this session to avoid
+  // spamming the same dialog every time _checkActiveTrip fires.
+  bool _permissionDialogShown = false;
+
+  Future<bool> _ensureLocationPermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      Dialogues.warningToast('Please turn on GPS/Location for trip tracking.');
+      return false;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      await _showOpenSettingsDialog(
+        title: 'Location Permission Required',
+        body: 'Background GPS tracking is required for your active trip. '
+            'Please enable location permission for this app.',
+      );
+      return false;
+    }
+
+    // Android 11+: "While using the app" = GPS stops as soon as the app
+    // is backgrounded, which kills tracking. We need "Allow all the time".
+    if (permission != LocationPermission.always) {
+      await _showOpenSettingsDialog(
+        title: 'Background Location Required',
+        body: 'Please change location permission to "Allow all the time". '
+            'Without it, GPS tracking stops when you leave the app.',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _showOpenSettingsDialog({
+    required String title,
+    required String body,
+  }) async {
+    if (_permissionDialogShown) return;
+    _permissionDialogShown = true;
+
+    await Get.dialog<void>(
+      AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('Not now'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Get.back();
+              await Geolocator.openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
 
   Future<void> _showTripAssignedDialog(TripModel trip) async {
     await showDialog(
@@ -221,61 +319,77 @@ class _TripAssignedDialogState extends State<_TripAssignedDialog> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: isRejecting || isAccepting
-                      ? null
-                      : () async {
-                          setState(() => isRejecting = true);
-                          Navigator.pop(context);
-                          await widget.controller
-                              .rejectTrip(trip.tripId ?? 0);
-                        },
+                  onPressed:
+                      isRejecting || isAccepting
+                          ? null
+                          : () async {
+                            setState(() => isRejecting = true);
+                            Navigator.pop(context);
+                            await widget.controller.rejectTrip(
+                              trip.tripId ?? 0,
+                            );
+                          },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.redAccent,
                     side: const BorderSide(color: Colors.redAccent),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: isRejecting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.redAccent),
-                        )
-                      : const Text('Reject',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
+                  child:
+                      isRejecting
+                          ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.redAccent,
+                            ),
+                          )
+                          : const Text(
+                            'Reject',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: isAccepting || isRejecting
-                      ? null
-                      : () async {
-                          setState(() => isAccepting = true);
-                          Navigator.pop(context);
-                          await widget.controller
-                              .acceptTrip(trip.tripId ?? 0);
-                        },
+                  onPressed:
+                      isAccepting || isRejecting
+                          ? null
+                          : () async {
+                            setState(() => isAccepting = true);
+                            Navigator.pop(context);
+                            await widget.controller.acceptTrip(
+                              trip.tripId ?? 0,
+                            );
+                          },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1B2A49),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: isAccepting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text(
-                          'Accept',
-                          style: TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.w600),
-                        ),
+                  child:
+                      isAccepting
+                          ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Text(
+                            'Accept',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                 ),
               ),
             ],
@@ -291,8 +405,11 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoRow(
-      {required this.icon, required this.label, required this.value});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -304,9 +421,10 @@ class _InfoRow extends StatelessWidget {
         Text(
           '$label: ',
           style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF274472)),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF274472),
+          ),
         ),
         Expanded(
           child: Text(
