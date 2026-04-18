@@ -49,8 +49,10 @@ class HomeController extends GetxController {
         // isRunning() can still return true (zombie container).
         if (trip.isOnGoing && driverId.value.isNotEmpty) {
           final isTracking = await BackgroundTrackingService.isRunning();
-          debugPrint('HomeController: active trip ${trip.tripId} isOnGoing, '
-              'service running=$isTracking');
+          debugPrint(
+            'HomeController: active trip ${trip.tripId} isOnGoing, '
+            'service running=$isTracking',
+          );
 
           final permissionOk = await _ensureLocationPermission();
           if (!permissionOk) {
@@ -69,7 +71,9 @@ class HomeController extends GetxController {
             trip.tripId ?? 0,
             int.tryParse(driverId.value) ?? 0,
           );
-          debugPrint('HomeController: tracking (re)started for trip ${trip.tripId}');
+          debugPrint(
+            'HomeController: tracking (re)started for trip ${trip.tripId}',
+          );
         }
       }
     } catch (e) {
@@ -99,7 +103,8 @@ class HomeController extends GetxController {
         permission == LocationPermission.deniedForever) {
       await _showOpenSettingsDialog(
         title: 'Location Permission Required',
-        body: 'Background GPS tracking is required for your active trip. '
+        body:
+            'Background GPS tracking is required for your active trip. '
             'Please enable location permission for this app.',
       );
       return false;
@@ -110,7 +115,8 @@ class HomeController extends GetxController {
     if (permission != LocationPermission.always) {
       await _showOpenSettingsDialog(
         title: 'Background Location Required',
-        body: 'Please change location permission to "Allow all the time". '
+        body:
+            'Please change location permission to "Allow all the time". '
             'Without it, GPS tracking stops when you leave the app.',
       );
       return false;
@@ -131,10 +137,7 @@ class HomeController extends GetxController {
         title: Text(title),
         content: Text(body),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Not now'),
-          ),
+          TextButton(onPressed: () => Get.back(), child: const Text('Not now')),
           TextButton(
             onPressed: () async {
               Get.back();
