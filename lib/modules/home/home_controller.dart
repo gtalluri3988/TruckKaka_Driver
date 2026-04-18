@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
@@ -8,7 +10,7 @@ import '../../services/trip_service.dart';
 import '../../utils/dialogue_service/dialogues.dart';
 import '../../utils/local_storage/stored_data.dart';
 
-class HomeController extends GetxController {
+class HomeController extends GetxController with WidgetsBindingObserver {
   final TripService _tripService = TripService();
 
   Rxn<TripModel> activeTrip = Rxn<TripModel>();
@@ -18,11 +20,101 @@ class HomeController extends GetxController {
   RxString driverName = ''.obs;
   RxString driverId = ''.obs;
 
+  // Reconciliation watchdog — verifies tracking state every 60s so a dead
+  // isolate / revoked permission / ended trip gets caught without the user
+  // tapping refresh. See _reconcileTracking for the rules it enforces.
+  Timer? _watchdogTimer;
+  static const _watchdogInterval = Duration(seconds: 60);
+
+  // Suppress dialog spam — re-shown when dialog is dismissed.
+  bool _permissionDialogShown = false;
+
+  @override
+  void onInit() {
+    super.onInit();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   @override
   void onReady() {
     super.onReady();
     _loadDriverInfo();
     _checkActiveTrip();
+    _startWatchdog();
+  }
+
+  @override
+  void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    super.onClose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When the user returns from system Settings (after flipping "Allow
+    // all the time") — or from any other backgrounded state — re-check
+    // immediately. This is the single most important fix for "tracking
+    // only starts after I tap refresh".
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('HomeController: app resumed, re-checking trip state');
+      _checkActiveTrip();
+    }
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) async {
+      await _reconcileTracking();
+    });
+  }
+
+  /// Enforce the "desired state" for tracking every 60s.
+  ///
+  /// Desired state:
+  ///   active OnGoing trip + permission=always + GPS on + service running
+  ///
+  /// Deviations:
+  ///   - no active trip → stop tracking
+  ///   - permission revoked / GPS off → stop tracking, re-prompt
+  ///   - service dead (zombie or killed by OS) → restart
+  Future<void> _reconcileTracking() async {
+    try {
+      final trip = activeTrip.value;
+      if (trip == null || !trip.isOnGoing) {
+        final running = await BackgroundTrackingService.isRunning();
+        if (running) {
+          debugPrint('Watchdog: no active trip but service running, stopping');
+          await BackgroundTrackingService.stopTracking();
+        }
+        return;
+      }
+
+      final gpsOn = await Geolocator.isLocationServiceEnabled();
+      final permission = await Geolocator.checkPermission();
+      final isTracking = await BackgroundTrackingService.isRunning();
+
+      if (!gpsOn || permission != LocationPermission.always) {
+        debugPrint(
+          'Watchdog: tracking prerequisites missing '
+          '(gps=$gpsOn perm=$permission), stopping',
+        );
+        if (isTracking) await BackgroundTrackingService.stopTracking();
+        await _ensureLocationPermission();
+        return;
+      }
+
+      if (!isTracking && driverId.value.isNotEmpty) {
+        debugPrint('Watchdog: service is down, restarting');
+        await BackgroundTrackingService.startTracking(
+          trip.tripId ?? 0,
+          int.tryParse(driverId.value) ?? 0,
+        );
+      }
+    } catch (e) {
+      debugPrint('Watchdog error: $e');
+    }
   }
 
   Future<void> _loadDriverInfo() async {
@@ -85,10 +177,6 @@ class HomeController extends GetxController {
 
   Future<void> refreshActiveTrip() => _checkActiveTrip();
 
-  // Track whether we've already nudged the user this session to avoid
-  // spamming the same dialog every time _checkActiveTrip fires.
-  bool _permissionDialogShown = false;
-
   Future<bool> _ensureLocationPermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       Dialogues.warningToast('Please turn on GPS/Location for trip tracking.');
@@ -132,23 +220,44 @@ class HomeController extends GetxController {
     if (_permissionDialogShown) return;
     _permissionDialogShown = true;
 
+    // When there's an active in-transit trip, the dialog is strictly
+    // blocking — no dismissal via back button or barrier tap. The only
+    // way forward is "Open Settings". For non-active trips we keep a
+    // "Not now" escape so the driver isn't trapped.
+    final hasActiveTrip = activeTrip.value?.isOnGoing ?? false;
+
     await Get.dialog<void>(
-      AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Not now')),
-          TextButton(
-            onPressed: () async {
-              Get.back();
-              await Geolocator.openAppSettings();
-            },
-            child: const Text('Open Settings'),
-          ),
-        ],
+      PopScope(
+        canPop: !hasActiveTrip,
+        child: AlertDialog(
+          title: Text(title),
+          content: Text(body),
+          actions: [
+            if (!hasActiveTrip)
+              TextButton(
+                onPressed: () {
+                  _permissionDialogShown = false;
+                  Get.back();
+                },
+                child: const Text('Not now'),
+              ),
+            FilledButton(
+              onPressed: () async {
+                _permissionDialogShown = false;
+                Get.back();
+                await Geolocator.openAppSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
       ),
-      barrierDismissible: false,
+      barrierDismissible: !hasActiveTrip,
     );
+
+    // Reset so the watchdog can re-show next cycle if the user dismissed
+    // without granting permission.
+    _permissionDialogShown = false;
   }
 
   Future<void> _showTripAssignedDialog(TripModel trip) async {

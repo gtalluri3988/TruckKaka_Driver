@@ -39,7 +39,19 @@ Future<void> backgroundTrackingOnStart(ServiceInstance service) async {
   int? driverId;
   StreamSubscription? locationSub;
   Timer? syncTimer;
+  Timer? permissionTimer;
   final locationService = LocationService();
+
+  // Unified teardown so every exit path (permission revoked, stopTracking,
+  // stopService, missing IDs) cancels the same three resources.
+  Future<void> shutdown(String reason) async {
+    // ignore: avoid_print
+    print('BackgroundTracking isolate: shutdown ($reason)');
+    locationSub?.cancel();
+    syncTimer?.cancel();
+    permissionTimer?.cancel();
+    await service.stopSelf();
+  }
 
   final prefs = await SharedPreferences.getInstance();
   tripId = prefs.getInt(StorageKeys.trackingTripId);
@@ -61,19 +73,11 @@ Future<void> backgroundTrackingOnStart(ServiceInstance service) async {
   });
 
   service.on('stopTracking').listen((_) async {
-    // ignore: avoid_print
-    print('BackgroundTracking isolate: received stopTracking');
-    locationSub?.cancel();
-    syncTimer?.cancel();
-    await service.stopSelf();
+    await shutdown('stopTracking command');
   });
 
   service.on('stopService').listen((_) async {
-    // ignore: avoid_print
-    print('BackgroundTracking isolate: received stopService');
-    locationSub?.cancel();
-    syncTimer?.cancel();
-    await service.stopSelf();
+    await shutdown('stopService command');
   });
 
   if (tripId == null || driverId == null) {
@@ -83,9 +87,7 @@ Future<void> backgroundTrackingOnStart(ServiceInstance service) async {
   }
 
   if (tripId == null || driverId == null) {
-    // ignore: avoid_print
-    print('BackgroundTracking isolate: no tripId/driverId, stopping');
-    await service.stopSelf();
+    await shutdown('no tripId/driverId');
     return;
   }
 
@@ -93,11 +95,21 @@ Future<void> backgroundTrackingOnStart(ServiceInstance service) async {
   // ignore: avoid_print
   print('BackgroundTracking isolate: hasPermission returned $hasPermission');
   if (!hasPermission) {
-    // ignore: avoid_print
-    print('BackgroundTracking isolate: permission NOT granted, stopping');
-    await service.stopSelf();
+    await shutdown('permission not granted at startup');
     return;
   }
+
+  // Re-check permission every 60s. If the user revokes "Allow all the
+  // time" while the trip is running, the OS won't notify us — we'd keep
+  // polling a silent GPS stream forever. Checking periodically catches
+  // that and tears the service down cleanly so the UI watchdog can
+  // notify the driver on next app resume.
+  permissionTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+    final stillGranted = await locationService.hasPermission();
+    if (!stillGranted) {
+      await shutdown('permission revoked mid-trip');
+    }
+  });
 
   final gpsEnabled = await locationService.isGpsEnabled();
   // ignore: avoid_print
