@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import '../../routes/app_routes.dart';
+import '../../services/auth_service.dart';
 import '../../utils/dialogue_service/dialogues.dart';
 import '../../utils/local_storage/stored_data.dart';
 
@@ -34,7 +35,9 @@ class AccountController extends GetxController {
   Future<void> _doLogout() async {
     isLoggingOut.value = true;
     try {
-      await StoredData.clearAll();
+      // AuthService.logout revokes the refresh token on the server, wipes
+      // SecureTokenStore, and clears legacy SharedPreferences.
+      await AuthService().logout();
       Get.offAllNamed(AppRoute.login);
     } finally {
       isLoggingOut.value = false;

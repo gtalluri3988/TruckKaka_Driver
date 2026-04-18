@@ -10,6 +10,9 @@ class ApiUrl {
   static String verifyOtp = 'Auth/VerifyOtp';
   static String loadMenus = 'Auth/LoadMenus';
   static String saveFcm = 'Auth/SaveFCM';
+  static String refreshToken = 'Auth/RefreshToken';
+  static String logout = 'Auth/Logout';
+  static String logoutAllDevices = 'Auth/LogoutAllDevices';
 
   // ── User ──────────────────────────────────────────────────────────────────
   static String getUserDetailsById = 'User/GetUserDetailsById';

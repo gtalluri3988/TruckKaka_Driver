@@ -5,6 +5,9 @@ import '../api/api_service.dart';
 import '../api/api_url.dart';
 import '../model/get_user_by_mobile_model.dart';
 import '../utils/local_storage/stored_data.dart';
+import 'device_id_service.dart';
+import 'secure_token_store.dart';
+import 'token_service.dart';
 
 class AuthService {
   /// Pre-login check: verify mobile is in User table AND has Driver record with OwnerId set.
@@ -29,12 +32,61 @@ class AuthService {
     );
   }
 
-  /// Step 2: Verify OTP and receive JWT.
-  Future<http.Response> verifyOtp(String mobile, String otp) {
+  /// Step 2: Verify OTP and receive token pair.
+  /// Passes deviceId + deviceName so the backend can track this session
+  /// separately from the user's other devices.
+  Future<http.Response> verifyOtp(String mobile, String otp) async {
+    final deviceId = await DeviceIdService.getDeviceId();
+    final deviceName = await DeviceIdService.getDeviceName();
+
     return ApiService.ioPost(
       url: ApiUrl.verifyOtp,
-      data: {'mobile': mobile, 'otp': otp},
+      data: {
+        'mobile': mobile,
+        'otp': otp,
+        'deviceId': deviceId,
+        'deviceName': deviceName,
+      },
     );
+  }
+
+  /// Persist both tokens from a login response. Call this after verifyOtp
+  /// (and any other endpoint that returns AuthenticationResponseDTO) so
+  /// the refresh interceptor has what it needs.
+  Future<void> persistTokensFromResponse(Map<String, dynamic> body) async {
+    // The response shape is AuthenticationResponseDTO wrapped in
+    // { success, message, data: {...} } for VerifyOTP. Unwrap defensively.
+    final data = body['data'] is Map<String, dynamic>
+        ? body['data'] as Map<String, dynamic>
+        : body;
+
+    final access = (data['accessToken'] as String?) ??
+        (data['token'] as String?); // legacy fallback
+    final refresh = data['refreshToken'] as String?;
+    final expiresIn = (data['accessTokenExpiresIn'] as num?)?.toInt() ?? 1200;
+    final refreshExpRaw = data['refreshTokenExpiresAt'] as String?;
+    final refreshExp = refreshExpRaw != null
+        ? DateTime.tryParse(refreshExpRaw) ??
+              DateTime.now().add(const Duration(days: 90))
+        : DateTime.now().add(const Duration(days: 90));
+
+    if (access != null && access.isNotEmpty) {
+      await SecureTokenStore.saveAccessToken(access, expiresIn);
+      // Keep legacy StoredData in sync so older call sites that read
+      // StoredData.getToken() directly keep working during migration.
+      await StoredData.saveToken(access);
+      await StoredData.saveTokenAsModel(access);
+    }
+    if (refresh != null && refresh.isNotEmpty) {
+      await SecureTokenStore.saveRefreshToken(refresh, refreshExp);
+    }
+  }
+
+  /// Logout: best-effort server-side revoke then full local wipe.
+  /// Safe to call even if already logged out.
+  Future<void> logout() async {
+    await TokenService.instance.logout();
+    await StoredData.clearAll();
   }
 
   /// Fetch user profile by mobile number (flags: language, role, KYC).

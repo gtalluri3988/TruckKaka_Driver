@@ -30,6 +30,11 @@ dependencies:
 
   # Storage
   shared_preferences: ^2.5.3
+  # Refresh token storage — Android Keystore / iOS Keychain backed.
+  flutter_secure_storage: ^9.2.2
+
+  # Device identity for multi-device refresh-token tracking
+  device_info_plus: ^10.1.2
 
   # UI & Animation
   google_fonts: ^6.2.0

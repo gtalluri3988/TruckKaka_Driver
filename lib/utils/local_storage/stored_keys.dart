@@ -1,6 +1,18 @@
 class StorageKeys {
+  // Access token (short-lived JWT). Kept in SharedPreferences since it
+  // only lives 20 min and the background isolate needs fast sync access.
   static const String token = 'token';
+  static const String accessTokenExpiresAt = 'access_token_expires_at';
   static const String tokenModel = 'jwt_data';
+
+  // Refresh token lives in flutter_secure_storage (Keystore/Keychain).
+  // Key is used with the secure storage backend, not SharedPreferences.
+  static const String refreshToken = 'refresh_token';
+  static const String refreshTokenExpiresAt = 'refresh_token_expires_at';
+
+  // Stable device ID generated once on first launch.
+  static const String deviceId = 'device_id';
+
   static const String login = 'login_data';
   static const String getUserByMobile = 'user_by_mobile';
   static const String menuList = 'menu_list';

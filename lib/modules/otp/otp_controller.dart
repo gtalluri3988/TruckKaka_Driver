@@ -105,8 +105,12 @@ class OtpController extends GetxController {
             jsonMap['data'] as Map<String, dynamic>);
 
         // ── Save session data ─────────────────────────────────────────────
-        await StoredData.saveToken(loginData.token ?? '');
-        await StoredData.saveTokenAsModel(loginData.token ?? '');
+        // Persist BOTH the short-lived access token and the 90-day refresh
+        // token. The refresh token goes into flutter_secure_storage
+        // (Android Keystore / iOS Keychain) — SecureTokenStore handles that.
+        // Legacy StoredData.saveToken is ALSO updated by persistTokensFromResponse
+        // so old call sites keep working during migration.
+        await AuthService().persistTokensFromResponse(jsonMap);
         await StoredData.saveLoginModel(loginData);
 
         final prefs = await SharedPreferences.getInstance();

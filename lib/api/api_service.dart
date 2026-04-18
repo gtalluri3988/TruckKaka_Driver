@@ -1,13 +1,15 @@
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart' as dio;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
-import 'api_url.dart';
+
+import '../services/secure_token_store.dart';
+import '../services/token_service.dart';
 import '../utils/local_storage/stored_data.dart';
+import 'api_url.dart';
 
 class ApiService {
   static final dio.Dio _dio = dio.Dio();
@@ -16,44 +18,112 @@ class ApiService {
   static void init() {
     _dio.interceptors.add(
       dio.InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final token = await StoredData.getToken();
-          final isAuthenticated = await StoredData.isAuthenticated();
-
-          if (isAuthenticated && token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-
-          // Use print() — log() from dart:developer is unreliable in background
-          // isolates (where the tracking service runs).
-          final authHeader = options.headers['Authorization'];
-          final authPreview = authHeader is String && authHeader.length > 20
-              ? '${authHeader.substring(0, 20)}…(${authHeader.length}ch)'
-              : (authHeader?.toString() ?? 'MISSING');
-          // ignore: avoid_print
-          print('REQUEST → ${options.method} ${options.uri} '
-              'auth=$authPreview isAuth=$isAuthenticated');
-          handler.next(options);
-        },
-        onResponse: (response, handler) {
-          // ignore: avoid_print
-          print('RESPONSE ← ${response.statusCode} '
-              '${response.requestOptions.uri}');
-          handler.next(response);
-        },
-        onError: (error, handler) {
-          // ignore: avoid_print
-          print('ERROR ← ${error.response?.statusCode} '
-              '${error.requestOptions.uri} '
-              'body=${error.response?.data}');
-          handler.next(error);
-        },
+        onRequest: _onRequest,
+        onResponse: _onResponse,
+        onError: _onError,
       ),
     );
 
-    final httpClient =
-        HttpClient()..badCertificateCallback = (cert, host, port) => true;
+    final httpClient = HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true;
     _ioClient = IOClient(httpClient);
+  }
+
+  // ── Dio interceptor callbacks ────────────────────────────────────────────
+
+  static Future<void> _onRequest(
+    dio.RequestOptions options,
+    dio.RequestInterceptorHandler handler,
+  ) async {
+    // Never attach a token to the refresh-token endpoint itself — that call
+    // uses its own refresh-token body; adding a stale Bearer would trigger a
+    // 401 loop.
+    if (options.path.contains(ApiUrl.refreshToken)) {
+      _log('REQUEST → ${options.method} ${options.uri} auth=NONE (refresh)');
+      handler.next(options);
+      return;
+    }
+
+    // Ask TokenService for a token that's fresh for the next 60s. This
+    // triggers a preemptive refresh if we're near expiry — better than
+    // waiting for a 401 round-trip.
+    final token = await TokenService.instance.getValidAccessToken();
+
+    if (token != null && token.isNotEmpty) {
+      options.headers['Authorization'] = 'Bearer $token';
+    } else {
+      // Fall back to legacy storage so pre-refresh-upgrade sessions keep
+      // working until their access token expires naturally.
+      final legacy = await StoredData.getToken();
+      if (legacy != null && legacy.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $legacy';
+      }
+    }
+
+    final authHeader = options.headers['Authorization'];
+    final authPreview = authHeader is String && authHeader.length > 20
+        ? '${authHeader.substring(0, 20)}…(${authHeader.length}ch)'
+        : (authHeader?.toString() ?? 'MISSING');
+    _log('REQUEST → ${options.method} ${options.uri} auth=$authPreview');
+
+    handler.next(options);
+  }
+
+  static void _onResponse(
+    dio.Response response,
+    dio.ResponseInterceptorHandler handler,
+  ) {
+    _log('RESPONSE ← ${response.statusCode} ${response.requestOptions.uri}');
+    handler.next(response);
+  }
+
+  /// On 401: refresh once and retry the original request. Multiple concurrent
+  /// requests that all hit 401 share the same refresh Future via TokenService.
+  static Future<void> _onError(
+    dio.DioException error,
+    dio.ErrorInterceptorHandler handler,
+  ) async {
+    final status = error.response?.statusCode;
+    final path = error.requestOptions.path;
+
+    _log('ERROR ← $status $path body=${error.response?.data}');
+
+    // Only intercept 401s AND make sure:
+    //   • we're not already retrying (flagged via extra)
+    //   • the 401 didn't come from the refresh endpoint itself
+    //   • the request can be replayed (has a body captured by Dio)
+    final alreadyRetried = error.requestOptions.extra['__retried_401'] == true;
+    final isRefreshCall = path.contains(ApiUrl.refreshToken);
+
+    if (status != 401 || alreadyRetried || isRefreshCall) {
+      handler.next(error);
+      return;
+    }
+
+    try {
+      final newToken = await TokenService.instance.refresh();
+
+      // Replay the original request with the new token and a flag so a
+      // second 401 won't loop us back into refresh again.
+      final retryOptions = error.requestOptions;
+      retryOptions.headers['Authorization'] = 'Bearer $newToken';
+      retryOptions.extra['__retried_401'] = true;
+
+      final retryResponse = await _dio.fetch(retryOptions);
+      _log('RETRY ✓ ${retryResponse.statusCode} $path');
+      handler.resolve(retryResponse);
+    } catch (e) {
+      // Refresh failed (token expired/revoked/reused, or network). User is
+      // effectively logged out — TokenService has emitted the event and
+      // cleared storage. Propagate the original 401 so the UI can react.
+      _log('RETRY ✗ $path — $e');
+      handler.next(error);
+    }
+  }
+
+  static void _log(String msg) {
+    // ignore: avoid_print
+    print(msg);
   }
 
   // ── HTTP fallback (no auth header) ──────────────────────────────────────
@@ -63,8 +133,9 @@ class ApiService {
     required dynamic data,
     Map<String, dynamic>? queryParameters,
   }) async {
-    final uri = Uri.parse('${ApiUrl.baseUrl}$url')
-        .replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '${ApiUrl.baseUrl}$url',
+    ).replace(queryParameters: queryParameters);
     return _ioClient.post(
       uri,
       headers: {'Content-Type': 'application/json'},
@@ -76,12 +147,13 @@ class ApiService {
     required String url,
     Map<String, dynamic>? queryParameters,
   }) async {
-    final uri = Uri.parse('${ApiUrl.baseUrl}$url')
-        .replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '${ApiUrl.baseUrl}$url',
+    ).replace(queryParameters: queryParameters);
     return _ioClient.get(uri, headers: {'Content-Type': 'application/json'});
   }
 
-  // ── Dio (with JWT interceptor) ───────────────────────────────────────────
+  // ── Dio (with JWT + refresh interceptor) ─────────────────────────────────
 
   static Future<dio.Response> post({
     required String url,
@@ -96,10 +168,7 @@ class ApiService {
         options: dio.Options(headers: {'Content-Type': 'application/json'}),
       );
     } on dio.DioException catch (e) {
-      // Surface the real failure so callers can see it in logcat.
-      // The response is still an empty shell so non-exception callers keep working.
-      // ignore: avoid_print
-      print('ApiService.post FAILED url=${ApiUrl.baseUrl}$url '
+      _log('ApiService.post FAILED url=${ApiUrl.baseUrl}$url '
           'type=${e.type} message=${e.message} '
           'responseStatus=${e.response?.statusCode} '
           'responseBody=${e.response?.data}');
@@ -122,8 +191,11 @@ class ApiService {
           headers: {'Content-Type': 'multipart/form-data'},
         ),
       );
-    } on dio.DioException {
-      return dio.Response(requestOptions: dio.RequestOptions());
+    } on dio.DioException catch (e) {
+      _log('ApiService.postWithFormData FAILED url=${ApiUrl.baseUrl}$url '
+          'type=${e.type} status=${e.response?.statusCode}');
+      return e.response ??
+          dio.Response(requestOptions: dio.RequestOptions(path: url));
     }
   }
 
@@ -137,8 +209,7 @@ class ApiService {
         queryParameters: queryParameters,
       );
     } on dio.DioException catch (e) {
-      // ignore: avoid_print
-      print('ApiService.get FAILED url=${ApiUrl.baseUrl}$url '
+      _log('ApiService.get FAILED url=${ApiUrl.baseUrl}$url '
           'type=${e.type} message=${e.message} '
           'responseStatus=${e.response?.statusCode} '
           'responseBody=${e.response?.data}');
@@ -154,4 +225,7 @@ class ApiService {
         r == ConnectivityResult.wifi ||
         r == ConnectivityResult.ethernet);
   }
+
+  // Kept for any call site that wants direct access (migration helper).
+  static Future<String?> currentAccessToken() => SecureTokenStore.getAccessToken();
 }
